@@ -18,8 +18,27 @@ class Rating extends CI_Controller {
             'rating'  => $this->input->post('rating')
         ]);
 
-        // Redirect ke homepage (akan otomatis tampil rekomendasi)
-        redirect('/');
+        // AUTO-TRAIN SVD Model setiap ada rating baru
+        $this->Rating_model->train_svd_model();
+
+        // Count user ratings
+        $rating_count = $this->db->where('user_id', $user_id)->count_all_results('ratings');
+        
+        // Success message with rating count
+        $this->session->set_flashdata('success', 
+            "Rating berhasil ditambahkan! Model SVD diperbarui. Anda sudah memiliki {$rating_count} transaksi rating."
+        );
+
+        // Redirect ke recommendations jika sudah punya cukup rating
+        if ($rating_count >= 3) {
+            redirect('recommendation');
+        } else {
+            // Belum cukup rating, arahkan untuk rating lebih banyak
+            $this->session->set_flashdata('info', 
+                "Tambahkan " . (3 - $rating_count) . " rating lagi untuk mendapat rekomendasi yang lebih akurat!"
+            );
+            redirect('tools');
+        }
     }
 
     public function my()

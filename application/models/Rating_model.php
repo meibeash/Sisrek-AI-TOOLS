@@ -3,6 +3,9 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Rating_model extends CI_Model {
 
+    // Property declaration for PHP 8.2+ compatibility
+    public $svd_predictions = [];
+
     public function save($data)
     {
         return $this->db->replace('ratings',$data);
@@ -161,6 +164,99 @@ class Rating_model extends CI_Model {
         }
         
         return $dot_product / (sqrt($norm1) * sqrt($norm2));
+    }
+
+    /**
+     * ============================================
+     * SVD Model-Based Collaborative Filtering
+     * ============================================
+     * Memanggil Python Flask API untuk mendapatkan rekomendasi berbasis SVD
+     * 
+     * Fallback Strategy:
+     * 1. Coba panggil SVD API
+     * 2. Jika gagal → fallback ke Content-Based Filtering
+     * 3. Jika masih gagal → fallback ke Popular items
+     */
+    public function get_svd_recommendations($user_id, $limit = 8)
+    {
+        // Python Flask API URL
+        $api_url = "http://localhost:5000/recommend/{$user_id}?n={$limit}";
+        
+        // Coba panggil SVD API
+        $response = $this->call_svd_api($api_url);
+        
+        if ($response && isset($response['recommendations']) && !empty($response['recommendations'])) {
+            // Extract tool_ids dari respons SVD
+            $tool_ids = array_column($response['recommendations'], 'tool_id');
+            
+            // Simpan predicted ratings untuk ditampilkan di view
+            $this->svd_predictions = [];
+            foreach ($response['recommendations'] as $rec) {
+                $this->svd_predictions[$rec['tool_id']] = $rec['predicted_rating'];
+            }
+            
+            return [
+                'tool_ids' => $tool_ids,
+                'predictions' => $this->svd_predictions,
+                'algorithm' => 'SVD Collaborative Filtering',
+                'success' => true
+            ];
+        }
+        
+        // Fallback ke Content-Based jika SVD gagal
+        log_message('info', 'SVD API unavailable, falling back to Content-Based');
+        $tool_ids = $this->get_recommendations($user_id, $limit);
+        
+        return [
+            'tool_ids' => $tool_ids,
+            'predictions' => [],
+            'algorithm' => 'Content-Based Filtering (Fallback)',
+            'success' => false
+        ];
+    }
+
+    /**
+     * Helper: Panggil SVD Python API
+     */
+    private function call_svd_api($url, $timeout = 5)
+    {
+        $context = stream_context_create([
+            'http' => [
+                'timeout' => $timeout,
+                'ignore_errors' => true
+            ]
+        ]);
+        
+        try {
+            $response = @file_get_contents($url, false, $context);
+            
+            if ($response === false) {
+                return null;
+            }
+            
+            return json_decode($response, true);
+        } catch (Exception $e) {
+            log_message('error', 'SVD API Error: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Train SVD Model via API
+     */
+    public function train_svd_model()
+    {
+        $api_url = "http://localhost:5000/train";
+        return $this->call_svd_api($api_url, 60); // Timeout lebih lama untuk training
+    }
+
+    /**
+     * Get SVD Model Info
+     */
+    public function get_svd_model_info()
+    {
+        $api_url = "http://localhost:5000/model-info";
+        return $this->call_svd_api($api_url);
     }
 }
 

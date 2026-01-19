@@ -1,0 +1,6 @@
+# Requirements for SVD Collaborative Filtering Recommender
+flask==3.0.0
+scikit-surprise==1.1.3
+mysql-connector-python==8.2.0
+pandas==2.1.4
+numpy==1.26.2
