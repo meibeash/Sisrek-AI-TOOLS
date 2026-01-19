@@ -19,7 +19,12 @@ class Rating extends CI_Controller {
         ]);
 
         // AUTO-TRAIN SVD Model setiap ada rating baru
+        // Coba train Python SVD (jika server jalan)
         $this->Rating_model->train_svd_model();
+        
+        // Train PHP SVD juga (backup jika Python tidak jalan)
+        $this->load->model('Svd_model');
+        $this->Svd_model->train();
 
         // Count user ratings
         $rating_count = $this->db->where('user_id', $user_id)->count_all_results('ratings');

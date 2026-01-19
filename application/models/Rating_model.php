@@ -182,11 +182,11 @@ class Rating_model extends CI_Model {
         // Python Flask API URL
         $api_url = "http://localhost:5000/recommend/{$user_id}?n={$limit}";
         
-        // Coba panggil SVD API
+        // Coba panggil SVD API (Python)
         $response = $this->call_svd_api($api_url);
         
         if ($response && isset($response['recommendations']) && !empty($response['recommendations'])) {
-            // Extract tool_ids dari respons SVD
+            // Extract tool_ids dari respons SVD Python
             $tool_ids = array_column($response['recommendations'], 'tool_id');
             
             // Simpan predicted ratings untuk ditampilkan di view
@@ -198,13 +198,30 @@ class Rating_model extends CI_Model {
             return [
                 'tool_ids' => $tool_ids,
                 'predictions' => $this->svd_predictions,
-                'algorithm' => 'SVD Collaborative Filtering',
+                'algorithm' => 'SVD Collaborative Filtering (Python)',
                 'success' => true
             ];
         }
         
-        // Fallback ke Content-Based jika SVD gagal
-        log_message('info', 'SVD API unavailable, falling back to Content-Based');
+        // Fallback ke PHP SVD jika Python tidak tersedia
+        log_message('info', 'Python SVD unavailable, trying PHP SVD...');
+        $CI =& get_instance();
+        $CI->load->model('Svd_model');
+        
+        $php_result = $CI->Svd_model->get_recommendations($user_id, $limit);
+        
+        if ($php_result['success'] && !empty($php_result['tool_ids'])) {
+            $this->svd_predictions = $php_result['predictions'];
+            return [
+                'tool_ids' => $php_result['tool_ids'],
+                'predictions' => $php_result['predictions'],
+                'algorithm' => 'SVD Collaborative Filtering (PHP)',
+                'success' => true
+            ];
+        }
+        
+        // Fallback terakhir ke Content-Based
+        log_message('info', 'SVD unavailable, falling back to Content-Based');
         $tool_ids = $this->get_recommendations($user_id, $limit);
         
         return [
